@@ -7,69 +7,48 @@ def extract_itv_data(uploaded_file):
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
-            words = page.extract_words()
-
-            if not words:
+            text = page.extract_text()
+            if not text:
                 continue
 
-            # Tentukan titik tengah halaman
-            page_width = page.width
-            midpoint = page_width / 2
+            lines = text.split("\n")
 
             current_itv_left = None
             current_itv_right = None
 
-            for i, word in enumerate(words):
-                text = word["text"]
-                x_position = word["x0"]
+            for line in lines:
 
-                # =====================
-                # DETEKSI ITV
-                # =====================
-                if text.upper() == "ITV":
-                    if i + 1 < len(words):
-                        next_word = words[i + 1]["text"]
+                # ==========================
+                # DETEKSI BARIS ITV (misal: 238 255)
+                # ==========================
+                itv_line = re.findall(r"\b\d{3}\b", line)
 
-                        if re.match(r"\d{3}", next_word):
-
-                            if x_position < midpoint:
-                                current_itv_left = next_word
-                            else:
-                                current_itv_right = next_word
-
+                if len(itv_line) >= 2:
+                    current_itv_left = itv_line[0]
+                    current_itv_right = itv_line[1]
                     continue
 
-                # =====================
-                # DETEKSI NOMOR + NAMA GABUNG
-                # =====================
-                match = re.match(r"(\d{4})([A-Z\.]+)", text)
+                # ==========================
+                # DETEKSI NOMOR + NAMA
+                # ==========================
+                matches = re.findall(r"(\d{4})\s+([A-Z\s\.]+)", line)
 
-                if match:
-                    nomor = match.group(1)
-                    nama_awal = match.group(2)
+                if matches:
+                    for idx, match in enumerate(matches):
+                        nomor = match[0]
+                        nama = match[1].strip()
 
-                    # Ambil kata lanjutan nama
-                    nama_lengkap = nama_awal
-
-                    for j in range(i+1, min(i+5, len(words))):
-                        next_text = words[j]["text"]
-
-                        if re.match(r"[A-Z\.]+", next_text):
-                            nama_lengkap += " " + next_text
+                        # Tentukan kiri atau kanan berdasarkan urutan
+                        if idx == 0:
+                            current_itv = current_itv_left
                         else:
-                            break
+                            current_itv = current_itv_right
 
-                    # Tentukan ITV berdasarkan posisi kiri/kanan
-                    if x_position < midpoint:
-                        current_itv = current_itv_left
-                    else:
-                        current_itv = current_itv_right
-
-                    if current_itv:
-                        data.append({
-                            "ITV": current_itv,
-                            "Nomor": nomor,
-                            "Nama": nama_lengkap.strip()
-                        })
+                        if current_itv:
+                            data.append({
+                                "ITV": current_itv,
+                                "Nomor": nomor,
+                                "Nama": nama
+                            })
 
     return pd.DataFrame(data)
