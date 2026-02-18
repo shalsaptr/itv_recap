@@ -12,29 +12,48 @@ def extract_itv_data(uploaded_file):
             if not words:
                 continue
 
-            # Urutkan berdasarkan posisi
+            # Urutkan berdasarkan posisi (atas ke bawah, kiri ke kanan)
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
             current_itv_by_column = {}
 
-            for word in words:
+            i = 0
+            while i < len(words):
+                word = words[i]
                 text = word["text"]
                 x = word["x0"]
 
-                # ======================
-                # DETEKSI ITV (3 digit)
-                # ======================
-                if re.fullmatch(r"\d{3}", text):
-                    # Simpan ITV berdasarkan posisi kolom
+                # ============================
+                # DETEKSI ITV (angka 3 digit ATAU huruf seperti TRAINING)
+                # ============================
+                if re.fullmatch(r"\d{3}", text) or text.isalpha():
                     current_itv_by_column[round(x, -1)] = text
+                    i += 1
                     continue
 
-                # ======================
+                # ============================
                 # DETEKSI NOMOR 4 DIGIT
-                # ======================
-                match = re.match(r"(\d{4})", text)
-                if match:
-                    nomor = match.group(1)
+                # ============================
+                if re.fullmatch(r"\d{4}", text):
+                    nomor = text
+                    nama_parts = []
+
+                    j = i + 1
+
+                    # Ambil semua kata kapital setelah nomor sebagai nama
+                    while j < len(words):
+                        next_word = words[j]
+                        next_text = next_word["text"]
+
+                        # Stop jika ketemu nomor lagi atau ITV lagi
+                        if re.fullmatch(r"\d{4}", next_text) or re.fullmatch(r"\d{3}", next_text):
+                            break
+
+                        if re.match(r"[A-Z\.]+", next_text):
+                            nama_parts.append(next_text)
+                            j += 1
+                        else:
+                            break
 
                     # Cari ITV berdasarkan kolom terdekat
                     closest_col = min(
@@ -45,18 +64,20 @@ def extract_itv_data(uploaded_file):
 
                     if closest_col:
                         itv = current_itv_by_column[closest_col]
+                        nama = " ".join(nama_parts)
 
-                        # Nama = sisa teks setelah nomor
-                        nama = text.replace(nomor, "").strip()
+                        if nama:
+                            data.append({
+                                "ITV": itv,
+                                "Nomor": nomor,
+                                "Nama": nama
+                            })
 
-                        data.append({
-                            "ITV": itv,
-                            "Nomor": nomor,
-                            "Nama": nama
-                        })
+                    i = j
+                else:
+                    i += 1
 
     df = pd.DataFrame(data)
-    df = df[df["Nama"] != ""]
     df = df.reset_index(drop=True)
 
     return df
