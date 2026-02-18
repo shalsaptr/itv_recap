@@ -12,35 +12,35 @@ def extract_itv_data(uploaded_file):
             if not words:
                 continue
 
+            # Urutkan berdasarkan posisi
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
-            # =========================
-            # 1️⃣ Ambil ITV dari header atas saja
-            # =========================
-            header_itv = []
+            current_itv_by_column = {}
 
-            for w in words:
-                text = w["text"].strip().upper()
-
-                # Ambil hanya ITV yang berada di bagian atas halaman
-                if w["top"] < 200:  
-                    if re.fullmatch(r"\d{3}", text) or text == "TRAINING":
-                        header_itv.append((w["x0"], text))
-
-            if not header_itv:
-                continue
-
-            # Urutkan berdasarkan posisi X (jadi kolom tetap)
-            header_itv = sorted(header_itv, key=lambda x: x[0])
-
-            # =========================
-            # 2️⃣ Proses semua nomor 4 digit
-            # =========================
             i = 0
             while i < len(words):
-                w = words[i]
-                text = w["text"]
+                word = words[i]
+                text = word["text"].strip()
+                x = word["x0"]
 
+                # ======================
+                # DETEKSI ITV (3 digit atau TRAINING)
+                # ======================
+                text_clean = re.sub(r'[^A-Z0-9]', '', text.upper())
+
+                if re.fullmatch(r"\d{3}", text_clean):
+                    current_itv_by_column[round(x, -1)] = text_clean
+                    i += 1
+                    continue
+
+                elif "TRAINING" in text_clean:
+                    current_itv_by_column[round(x, -1)] = "TRAINING"
+                    i += 1
+                    continue
+
+                # ======================
+                # DETEKSI NOMOR 4 DIGIT
+                # ======================
                 match = re.match(r"(\d{4})(.*)", text)
                 if match:
                     nomor = match.group(1)
@@ -50,17 +50,20 @@ def extract_itv_data(uploaded_file):
                     if sisa:
                         nama_parts.append(sisa)
 
-                    top = round(w["top"], 1)
+                    top = round(word["top"], 1)
                     j = i + 1
 
+                    # Gabungkan nama dalam baris yang sama
                     while j < len(words):
                         next_word = words[j]
                         next_text = next_word["text"]
                         next_top = round(next_word["top"], 1)
 
+                        # Berhenti kalau beda baris
                         if abs(next_top - top) > 3:
                             break
 
+                        # Stop kalau ketemu angka lagi
                         if re.fullmatch(r"\d+", next_text):
                             break
 
@@ -70,30 +73,30 @@ def extract_itv_data(uploaded_file):
                         nama_parts.append(next_text)
                         j += 1
 
-                    # Tentukan kolom berdasarkan posisi X
-                    x_person = w["x0"]
+                    # Cari ITV berdasarkan kolom terdekat
+                    if current_itv_by_column:
+                        closest_col = min(
+                            current_itv_by_column.keys(),
+                            key=lambda col: abs(col - x)
+                        )
 
-                    # Cari kolom header terdekat secara urutan
-                    col_index = min(
-                        range(len(header_itv)),
-                        key=lambda idx: abs(header_itv[idx][0] - x_person)
-                    )
+                        itv = current_itv_by_column[closest_col]
+                        nama = " ".join(nama_parts).strip()
 
-                    itv_value = header_itv[col_index][1]
-                    nama = " ".join(nama_parts).strip()
-
-                    if nama:
-                        data.append({
-                            "ITV": itv_value,
-                            "Nomor": nomor,
-                            "Nama": nama
-                        })
+                        if nama:
+                            data.append({
+                                "ITV": itv,
+                                "Nomor": nomor,
+                                "Nama": nama
+                            })
 
                     i = j
                 else:
                     i += 1
 
     df = pd.DataFrame(data)
-    df = df.reset_index(drop=True)
+
+    if not df.empty:
+        df = df.reset_index(drop=True)
 
     return df
