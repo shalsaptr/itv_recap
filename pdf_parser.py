@@ -45,20 +45,24 @@ def extract_itv_data(uploaded_file):
                     # Ambil word berikutnya selama masih di baris yg sama
                     j = i + 1
                     while j < len(words):
-                        next_word = words[j]
-                        next_text = next_word["text"]
-                        next_top = round(next_word["top"], 1)
+    next_word = words[j]
+    next_text = next_word["text"]
+    next_top = round(next_word["top"], 1)
 
-                        # Stop kalau pindah baris
-                        if abs(next_top - top) > 2:
-                            break
+    # Stop kalau pindah baris
+    if abs(next_top - top) > 2:
+        break
 
-                        # Stop kalau ketemu nomor baru
-                        if re.match(r"\d{4}", next_text):
-                            break
+    # Stop kalau ketemu angka (kolom jumlah)
+    if re.fullmatch(r"\d+", next_text):
+        break
 
-                        nama_parts.append(next_text)
-                        j += 1
+    # Stop kalau ketemu nomor baru
+    if re.match(r"\d{4}", next_text):
+        break
+
+    nama_parts.append(next_text)
+    j += 1
 
                     if current_itv_by_column:
                         closest_col = min(
