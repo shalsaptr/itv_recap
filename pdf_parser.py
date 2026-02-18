@@ -9,43 +9,67 @@ def extract_itv_data(uploaded_file):
         for page in pdf.pages:
             words = page.extract_words()
 
-            # Urutkan berdasarkan posisi vertikal lalu horizontal
-            words = sorted(words, key=lambda w: (w["top"], w["x0"]))
+            if not words:
+                continue
 
-            current_itv = None
+            # Tentukan titik tengah halaman
+            page_width = page.width
+            midpoint = page_width / 2
+
+            current_itv_left = None
+            current_itv_right = None
 
             for i, word in enumerate(words):
                 text = word["text"]
+                x_position = word["x0"]
 
-                # Deteksi ITV
+                # =====================
+                # DETEKSI ITV
+                # =====================
                 if text.upper() == "ITV":
-                    # Angka setelah ITV adalah nomor ITV
                     if i + 1 < len(words):
                         next_word = words[i + 1]["text"]
+
                         if re.match(r"\d{3}", next_word):
-                            current_itv = next_word
+
+                            if x_position < midpoint:
+                                current_itv_left = next_word
+                            else:
+                                current_itv_right = next_word
+
                     continue
 
-                # Deteksi nomor karyawan (4 digit)
-                if re.match(r"\d{4}", text):
-                    nomor = text
-                    nama = ""
+                # =====================
+                # DETEKSI NOMOR + NAMA GABUNG
+                # =====================
+                match = re.match(r"(\d{4})([A-Z\.]+)", text)
 
-                    # Ambil beberapa kata setelahnya sebagai nama
-                    for j in range(i+1, min(i+6, len(words))):
+                if match:
+                    nomor = match.group(1)
+                    nama_awal = match.group(2)
+
+                    # Ambil kata lanjutan nama
+                    nama_lengkap = nama_awal
+
+                    for j in range(i+1, min(i+5, len(words))):
                         next_text = words[j]["text"]
 
                         if re.match(r"[A-Z\.]+", next_text):
-                            nama += next_text + " "
+                            nama_lengkap += " " + next_text
                         else:
                             break
 
-                    if current_itv and nama:
+                    # Tentukan ITV berdasarkan posisi kiri/kanan
+                    if x_position < midpoint:
+                        current_itv = current_itv_left
+                    else:
+                        current_itv = current_itv_right
+
+                    if current_itv:
                         data.append({
                             "ITV": current_itv,
                             "Nomor": nomor,
-                            "Nama": nama.strip()
+                            "Nama": nama_lengkap.strip()
                         })
 
-    df = pd.DataFrame(data)
-    return df
+    return pd.DataFrame(data)
