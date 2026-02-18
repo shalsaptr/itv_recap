@@ -12,21 +12,19 @@ def extract_itv_data(uploaded_file):
             if not words:
                 continue
 
-            # Urutkan berdasarkan posisi (atas ke bawah, kiri ke kanan)
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
-            # Simpan ITV berdasarkan posisi kolom
             current_itv_by_column = {}
 
             i = 0
             while i < len(words):
                 word = words[i]
-                text = word["text"]
+                text = word["text"].strip()
                 x = word["x0"]
                 top = round(word["top"], 1)
 
                 # ==================================
-                # 1️⃣ DETEKSI ITV (3 digit saja)
+                # 1️⃣ DETEKSI ITV ANGKA (3 digit)
                 # ==================================
                 if re.fullmatch(r"\d{3}", text):
                     current_itv_by_column[round(x, -1)] = text
@@ -34,7 +32,15 @@ def extract_itv_data(uploaded_file):
                     continue
 
                 # ==================================
-                # 2️⃣ DETEKSI NOMOR (4 digit di awal)
+                # 2️⃣ DETEKSI ITV KHUSUS TRAINING
+                # ==================================
+                if text.upper() == "TRAINING":
+                    current_itv_by_column[round(x, -1)] = "TRAINING"
+                    i += 1
+                    continue
+
+                # ==================================
+                # 3️⃣ DETEKSI NOMOR 4 DIGIT
                 # ==================================
                 match = re.match(r"(\d{4})(.*)", text)
                 if match:
@@ -43,13 +49,11 @@ def extract_itv_data(uploaded_file):
 
                     nama_parts = []
 
-                    # Kalau nama nempel di word yang sama
                     if sisa:
                         nama_parts.append(sisa)
 
                     j = i + 1
 
-                    # Ambil semua kata dalam baris yang sama
                     while j < len(words):
                         next_word = words[j]
                         next_text = next_word["text"]
@@ -59,18 +63,17 @@ def extract_itv_data(uploaded_file):
                         if abs(next_top - top) > 2:
                             break
 
-                        # Stop kalau ketemu angka saja (kolom jumlah)
+                        # Stop kalau angka saja (kolom jumlah)
                         if re.fullmatch(r"\d+", next_text):
                             break
 
-                        # Stop kalau ketemu nomor baru
+                        # Stop kalau nomor baru
                         if re.match(r"\d{4}", next_text):
                             break
 
                         nama_parts.append(next_text)
                         j += 1
 
-                    # Cari ITV berdasarkan kolom terdekat
                     if current_itv_by_column:
                         closest_col = min(
                             current_itv_by_column.keys(),
