@@ -7,55 +7,54 @@ def extract_itv_data(uploaded_file):
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
-            words = page.extract_words(x_tolerance=3, y_tolerance=3)
+            words = page.extract_words(
+                x_tolerance=3,
+                y_tolerance=3
+            )
 
             if not words:
                 continue
 
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
-            # ===============================
-            # 1️⃣ Deteksi semua ITV header
-            # ===============================
-            itv_map = {}
+            current_itv_by_column = {}
 
-            for w in words:
-                text = w["text"].strip()
-                text_clean = re.sub(r'[^A-Z0-9]', '', text.upper())
-
-                # Ambil ITV hanya di bagian atas halaman
-                if w["top"] < 250:
-                    if re.fullmatch(r"\d{3}", text_clean):
-                        itv_map[w["x0"]] = text_clean
-                    elif "TRAINING" in text_clean:
-                        itv_map[w["x0"]] = "TRAINING"
-
-            if not itv_map:
-                continue
-
-            # Urutkan kolom berdasarkan X
-            sorted_columns = sorted(itv_map.items(), key=lambda x: x[0])
-            column_x_positions = [col[0] for col in sorted_columns]
-            column_values = [col[1] for col in sorted_columns]
-
-            # ===============================
-            # 2️⃣ Proses nomor & nama
-            # ===============================
             i = 0
             while i < len(words):
                 word = words[i]
-                text = word["text"]
+                text = word["text"].strip()
+                x = word["x0"]
+                top = round(word["top"], 1)
 
+                # ==================================
+                # 1️⃣ ITV ANGKA (3 digit)
+                # ==================================
+                if re.fullmatch(r"\d{3}", text):
+                    current_itv_by_column[round(x, -1)] = text
+                    i += 1
+                    continue
+
+                # ==================================
+                # 2️⃣ DETEKSI TRAINING (fleksibel)
+                # ==================================
+                if "TRAINING" in text.upper():
+                    current_itv_by_column[round(x, -1)] = "TRAINING"
+                    i += 1
+                    continue
+
+                # ==================================
+                # 3️⃣ NOMOR 4 DIGIT
+                # ==================================
                 match = re.match(r"(\d{4})(.*)", text)
                 if match:
                     nomor = match.group(1)
                     sisa = match.group(2).strip()
 
                     nama_parts = []
+
                     if sisa:
                         nama_parts.append(sisa)
 
-                    top = round(word["top"], 1)
                     j = i + 1
 
                     while j < len(words):
@@ -66,40 +65,36 @@ def extract_itv_data(uploaded_file):
                         if abs(next_top - top) > 3:
                             break
 
-                        if re.match(r"\d{4}", next_text):
+                        if re.fullmatch(r"\d+", next_text):
                             break
 
-                        if re.fullmatch(r"\d+", next_text):
+                        if re.match(r"\d{4}", next_text):
                             break
 
                         nama_parts.append(next_text)
                         j += 1
 
-                    # Tentukan kolom berdasarkan posisi X terdekat
-                    x_person = word["x0"]
+                    if current_itv_by_column:
+                        closest_col = min(
+                            current_itv_by_column.keys(),
+                            key=lambda col: abs(col - x)
+                        )
+                        itv = current_itv_by_column[closest_col]
 
-                    closest_index = min(
-                        range(len(column_x_positions)),
-                        key=lambda idx: abs(column_x_positions[idx] - x_person)
-                    )
+                        nama = " ".join(nama_parts).strip()
 
-                    itv_value = column_values[closest_index]
-                    nama = " ".join(nama_parts).strip()
-
-                    if nama:
-                        data.append({
-                            "ITV": itv_value,
-                            "Nomor": nomor,
-                            "Nama": nama
-                        })
+                        if nama:
+                            data.append({
+                                "ITV": itv,
+                                "Nomor": nomor,
+                                "Nama": nama
+                            })
 
                     i = j
                 else:
                     i += 1
 
     df = pd.DataFrame(data)
-
-    if not df.empty:
-        df = df.reset_index(drop=True)
+    df = df.reset_index(drop=True)
 
     return df
