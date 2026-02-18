@@ -14,23 +14,28 @@ def extract_itv_data(uploaded_file):
 
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
-            # ===============================
-            # 1️⃣ Ambil semua ITV dulu
-            # ===============================
-            itv_columns = {}
+            # =========================
+            # 1️⃣ Ambil ITV dari header atas saja
+            # =========================
+            header_itv = []
 
             for w in words:
                 text = w["text"].strip().upper()
 
-                if re.fullmatch(r"\d{3}", text) or text == "TRAINING":
-                    itv_columns[w["x0"]] = text
+                # Ambil hanya ITV yang berada di bagian atas halaman
+                if w["top"] < 200:  
+                    if re.fullmatch(r"\d{3}", text) or text == "TRAINING":
+                        header_itv.append((w["x0"], text))
 
-            if not itv_columns:
+            if not header_itv:
                 continue
 
-            # ===============================
-            # 2️⃣ Ambil semua orang
-            # ===============================
+            # Urutkan berdasarkan posisi X (jadi kolom tetap)
+            header_itv = sorted(header_itv, key=lambda x: x[0])
+
+            # =========================
+            # 2️⃣ Proses semua nomor 4 digit
+            # =========================
             i = 0
             while i < len(words):
                 w = words[i]
@@ -65,17 +70,21 @@ def extract_itv_data(uploaded_file):
                         nama_parts.append(next_text)
                         j += 1
 
-                    # Cari ITV kolom terdekat
-                    closest_itv = min(
-                        itv_columns.items(),
-                        key=lambda item: abs(item[0] - w["x0"])
-                    )[1]
+                    # Tentukan kolom berdasarkan posisi X
+                    x_person = w["x0"]
 
+                    # Cari kolom header terdekat secara urutan
+                    col_index = min(
+                        range(len(header_itv)),
+                        key=lambda idx: abs(header_itv[idx][0] - x_person)
+                    )
+
+                    itv_value = header_itv[col_index][1]
                     nama = " ".join(nama_parts).strip()
 
                     if nama:
                         data.append({
-                            "ITV": closest_itv,
+                            "ITV": itv_value,
                             "Nomor": nomor,
                             "Nama": nama
                         })
