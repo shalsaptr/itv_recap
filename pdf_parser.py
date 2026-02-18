@@ -6,95 +6,46 @@ def extract_itv_data(uploaded_file):
     data = []
 
     with pdfplumber.open(uploaded_file) as pdf:
+        full_text = ""
+
         for page in pdf.pages:
-            words = page.extract_words(
-                x_tolerance=3,
-                y_tolerance=3
-            )
+            text = page.extract_text()
+            if text:
+                full_text += "\n" + text
 
-            if not words:
-                continue
+    # Bersihkan kasus nama nempel nomor
+    full_text = re.sub(r"([A-Z])(\d{4})", r"\1 \2", full_text)
 
-            words = sorted(words, key=lambda w: (w["top"], w["x0"]))
+    lines = full_text.split("\n")
 
-            current_itv_by_column = {}
+    current_itvs = []
 
-            i = 0
-            while i < len(words):
-                word = words[i]
-                text = word["text"].strip()
-                x = word["x0"]
-                top = round(word["top"], 1)
+    for line in lines:
+        line = line.strip()
 
-                # ==================================
-                # 1️⃣ ITV ANGKA (3 digit)
-                # ==================================
-                if re.fullmatch(r"\d{3}", text):
-                    current_itv_by_column[round(x, -1)] = text
-                    i += 1
-                    continue
+        # ==========================
+        # 1️⃣ DETEKSI BARIS ITV (3 digit banyak)
+        # ==========================
+        itv_matches = re.findall(r"\b\d{3}\b", line)
+        if len(itv_matches) >= 1:
+            current_itvs = itv_matches
+            continue
 
-                # ==================================
-                # 2️⃣ DETEKSI TRAINING (fleksibel)
-                # ==================================
-                if "TRAINING" in text.upper():
-                    current_itv_by_column[round(x, -1)] = "TRAINING"
-                    i += 1
-                    continue
+        # ==========================
+        # 2️⃣ DETEKSI NOMOR + NAMA
+        # ==========================
+        match = re.match(r"(\d{4})\s+(.+)", line)
+        if match and current_itvs:
+            nomor = match.group(1)
+            nama = match.group(2).strip()
 
-                # ==================================
-                # 3️⃣ NOMOR 4 DIGIT
-                # ==================================
-                match = re.match(r"(\d{4})(.*)", text)
-                if match:
-                    nomor = match.group(1)
-                    sisa = match.group(2).strip()
-
-                    nama_parts = []
-
-                    if sisa:
-                        nama_parts.append(sisa)
-
-                    j = i + 1
-
-                    while j < len(words):
-                        next_word = words[j]
-                        next_text = next_word["text"]
-                        next_top = round(next_word["top"], 1)
-
-                        if abs(next_top - top) > 3:
-                            break
-
-                        if re.fullmatch(r"\d+", next_text):
-                            break
-
-                        if re.match(r"\d{4}", next_text):
-                            break
-
-                        nama_parts.append(next_text)
-                        j += 1
-
-                    if current_itv_by_column:
-                        closest_col = min(
-                            current_itv_by_column.keys(),
-                            key=lambda col: abs(col - x)
-                        )
-                        itv = current_itv_by_column[closest_col]
-
-                        nama = " ".join(nama_parts).strip()
-
-                        if nama:
-                            data.append({
-                                "ITV": itv,
-                                "Nomor": nomor,
-                                "Nama": nama
-                            })
-
-                    i = j
-                else:
-                    i += 1
+            # Assign ke ITV secara urut
+            for itv in current_itvs:
+                data.append({
+                    "ITV": itv,
+                    "Nomor": nomor,
+                    "Nama": nama
+                })
 
     df = pd.DataFrame(data)
-    df = df.reset_index(drop=True)
-
     return df
