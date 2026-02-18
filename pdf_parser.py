@@ -7,7 +7,10 @@ def extract_itv_data(uploaded_file):
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
-            words = page.extract_words()
+            words = page.extract_words(
+                x_tolerance=3,
+                y_tolerance=3
+            )
 
             if not words:
                 continue
@@ -24,7 +27,7 @@ def extract_itv_data(uploaded_file):
                 top = round(word["top"], 1)
 
                 # ==================================
-                # 1️⃣ DETEKSI ITV ANGKA (3 digit)
+                # 1️⃣ ITV ANGKA (3 digit)
                 # ==================================
                 if re.fullmatch(r"\d{3}", text):
                     current_itv_by_column[round(x, -1)] = text
@@ -32,15 +35,15 @@ def extract_itv_data(uploaded_file):
                     continue
 
                 # ==================================
-                # 2️⃣ DETEKSI ITV KHUSUS TRAINING
+                # 2️⃣ DETEKSI TRAINING (fleksibel)
                 # ==================================
-                if text.upper() == "TRAINING":
+                if "TRAINING" in text.upper():
                     current_itv_by_column[round(x, -1)] = "TRAINING"
                     i += 1
                     continue
 
                 # ==================================
-                # 3️⃣ DETEKSI NOMOR 4 DIGIT
+                # 3️⃣ NOMOR 4 DIGIT
                 # ==================================
                 match = re.match(r"(\d{4})(.*)", text)
                 if match:
@@ -59,15 +62,12 @@ def extract_itv_data(uploaded_file):
                         next_text = next_word["text"]
                         next_top = round(next_word["top"], 1)
 
-                        # Stop kalau pindah baris
-                        if abs(next_top - top) > 2:
+                        if abs(next_top - top) > 3:
                             break
 
-                        # Stop kalau angka saja (kolom jumlah)
                         if re.fullmatch(r"\d+", next_text):
                             break
 
-                        # Stop kalau nomor baru
                         if re.match(r"\d{4}", next_text):
                             break
 
