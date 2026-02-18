@@ -7,48 +7,54 @@ def extract_itv_data(uploaded_file):
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
-            text = page.extract_text()
-            if not text:
+            words = page.extract_words()
+
+            if not words:
                 continue
 
-            lines = text.split("\n")
+            # Kelompokkan berdasarkan baris (posisi vertikal)
+            lines = {}
+            for word in words:
+                top = round(word["top"], 0)
+                lines.setdefault(top, []).append(word)
 
-            current_itv_left = None
-            current_itv_right = None
+            sorted_lines = sorted(lines.items(), key=lambda x: x[0])
 
-            for line in lines:
+            current_itv = []
 
-                # ==========================
-                # DETEKSI BARIS ITV (misal: 238 255)
-                # ==========================
-                itv_line = re.findall(r"\b\d{3}\b", line)
+            for _, line_words in sorted_lines:
+                texts = [w["text"] for w in sorted(line_words, key=lambda x: x["x0"])]
 
-                if len(itv_line) >= 2:
-                    current_itv_left = itv_line[0]
-                    current_itv_right = itv_line[1]
+                # =====================
+                # DETEKSI ITV (3 digit saja)
+                # =====================
+                itv_candidates = [t for t in texts if re.fullmatch(r"\d{3}", t)]
+
+                if len(itv_candidates) >= 1:
+                    current_itv = itv_candidates
                     continue
 
-                # ==========================
-                # DETEKSI NOMOR + NAMA
-                # ==========================
-                matches = re.findall(r"(\d{4})\s+([A-Z\s\.]+)", line)
+                # =====================
+                # DETEKSI NOMOR 4 digit
+                # =====================
+                row_text = " ".join(texts)
+                matches = re.findall(r"(\d{4})\s+([A-Z][A-Z\s\.]+)", row_text)
 
-                if matches:
+                if matches and current_itv:
                     for idx, match in enumerate(matches):
                         nomor = match[0]
                         nama = match[1].strip()
 
-                        # Tentukan kiri atau kanan berdasarkan urutan
-                        if idx == 0:
-                            current_itv = current_itv_left
+                        # Cocokkan dengan ITV sesuai urutan
+                        if idx < len(current_itv):
+                            itv = current_itv[idx]
                         else:
-                            current_itv = current_itv_right
+                            itv = current_itv[0]
 
-                        if current_itv:
-                            data.append({
-                                "ITV": current_itv,
-                                "Nomor": nomor,
-                                "Nama": nama
-                            })
+                        data.append({
+                            "ITV": itv,
+                            "Nomor": nomor,
+                            "Nama": nama
+                        })
 
     return pd.DataFrame(data)
