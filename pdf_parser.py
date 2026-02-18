@@ -12,48 +12,51 @@ def extract_itv_data(uploaded_file):
             if not words:
                 continue
 
-            # Kelompokkan berdasarkan baris (posisi Y)
-            lines = {}
+            # Urutkan berdasarkan posisi
+            words = sorted(words, key=lambda w: (w["top"], w["x0"]))
+
+            current_itv_by_column = {}
+
             for word in words:
-                top = round(word["top"], 0)
-                lines.setdefault(top, []).append(word)
+                text = word["text"]
+                x = word["x0"]
 
-            sorted_lines = sorted(lines.items(), key=lambda x: x[0])
-
-            current_itvs = []
-
-            for _, line_words in sorted_lines:
-                # Urutkan kiri ke kanan
-                line_words = sorted(line_words, key=lambda w: w["x0"])
-                texts = [w["text"] for w in line_words]
-
-                # =============================
-                # DETEKSI BARIS ITV (3 digit)
-                # =============================
-                itv_candidates = [t for t in texts if re.fullmatch(r"\d{3}", t)]
-
-                if len(itv_candidates) >= 1:
-                    current_itvs = itv_candidates
+                # ======================
+                # DETEKSI ITV (3 digit)
+                # ======================
+                if re.fullmatch(r"\d{3}", text):
+                    # Simpan ITV berdasarkan posisi kolom
+                    current_itv_by_column[round(x, -1)] = text
                     continue
 
-                # =============================
-                # DETEKSI SEMUA NOMOR 4 DIGIT DI BARIS
-                # =============================
-                row_text = " ".join(texts)
-                matches = re.findall(r"(\d{4})\s+([A-Z][A-Z\s\.]+)", row_text)
+                # ======================
+                # DETEKSI NOMOR 4 DIGIT
+                # ======================
+                match = re.match(r"(\d{4})", text)
+                if match:
+                    nomor = match.group(1)
 
-                if matches and current_itvs:
-                    for idx, (nomor, nama) in enumerate(matches):
+                    # Cari ITV berdasarkan kolom terdekat
+                    closest_col = min(
+                        current_itv_by_column.keys(),
+                        key=lambda col: abs(col - x),
+                        default=None
+                    )
 
-                        if idx < len(current_itvs):
-                            itv = current_itvs[idx]
-                        else:
-                            itv = current_itvs[-1]
+                    if closest_col:
+                        itv = current_itv_by_column[closest_col]
+
+                        # Nama = sisa teks setelah nomor
+                        nama = text.replace(nomor, "").strip()
 
                         data.append({
                             "ITV": itv,
                             "Nomor": nomor,
-                            "Nama": nama.strip()
+                            "Nama": nama
                         })
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df = df[df["Nama"] != ""]
+    df = df.reset_index(drop=True)
+
+    return df
