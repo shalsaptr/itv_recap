@@ -2,50 +2,50 @@ import pdfplumber
 import pandas as pd
 import re
 
-def extract_itv_data(uploaded_file):
+def extract_itv_data(pdf_path):
     data = []
 
-    with pdfplumber.open(uploaded_file) as pdf:
-        full_text = ""
-
+    with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                full_text += "\n" + text
 
-    # Bersihkan kasus nama nempel nomor
-    full_text = re.sub(r"([A-Z])(\d{4})", r"\1 \2", full_text)
+            words = page.extract_words(x_tolerance=2, y_tolerance=2)
+            words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
-    lines = full_text.split("\n")
+            # Kelompokkan berdasarkan baris (top mirip)
+            rows = {}
+            for w in words:
+                top_key = round(w["top"] / 5) * 5
+                rows.setdefault(top_key, []).append(w)
 
-    current_itvs = []
+            current_itvs = []
 
-    for line in lines:
-        line = line.strip()
+            for row in rows.values():
+                row = sorted(row, key=lambda w: w["x0"])
+                texts = [w["text"] for w in row]
 
-        # ==========================
-        # 1️⃣ DETEKSI BARIS ITV (3 digit banyak)
-        # ==========================
-        itv_matches = re.findall(r"\b\d{3}\b", line)
-        if len(itv_matches) >= 1:
-            current_itvs = itv_matches
-            continue
+                # ==============================
+                # 1️⃣ DETEKSI BARIS ITV (3 angka)
+                # ==============================
+                itv_matches = [t for t in texts if re.fullmatch(r"\d{3}", t)]
+                if len(itv_matches) >= 1:
+                    current_itvs = itv_matches
+                    continue
 
-        # ==========================
-        # 2️⃣ DETEKSI NOMOR + NAMA
-        # ==========================
-        match = re.match(r"(\d{4})\s+(.+)", line)
-        if match and current_itvs:
-            nomor = match.group(1)
-            nama = match.group(2).strip()
+                # ==============================
+                # 2️⃣ DETEKSI 3 KOLOM NOMOR + NAMA
+                # ==============================
+                combined = " ".join(texts)
 
-            # Assign ke ITV secara urut
-            for itv in current_itvs:
-                data.append({
-                    "ITV": itv,
-                    "Nomor": nomor,
-                    "Nama": nama
-                })
+                matches = re.findall(r"(\d{4})\s+([A-Z\.\'\- ]+)", combined)
+
+                if matches and current_itvs:
+                    for idx, match in enumerate(matches):
+                        if idx < len(current_itvs):
+                            data.append({
+                                "ITV": current_itvs[idx],
+                                "Nomor": match[0],
+                                "Nama": match[1].strip()
+                            })
 
     df = pd.DataFrame(data)
     return df
