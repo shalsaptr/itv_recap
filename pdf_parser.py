@@ -15,33 +15,31 @@ def extract_itv_data(uploaded_file):
             words = sorted(words, key=lambda w: (w["top"], w["x0"]))
 
             # ===============================
-            # 1️⃣ Ambil semua ITV (3 digit / TRAINING)
+            # 1️⃣ Deteksi semua ITV header
             # ===============================
-            itv_columns = []
+            itv_map = {}
 
             for w in words:
                 text = w["text"].strip()
                 text_clean = re.sub(r'[^A-Z0-9]', '', text.upper())
 
-                if re.fullmatch(r"\d{3}", text_clean) or "TRAINING" in text_clean:
-                    itv_columns.append({
-                        "x": w["x0"],
-                        "value": "TRAINING" if "TRAINING" in text_clean else text_clean
-                    })
+                # Ambil ITV hanya di bagian atas halaman
+                if w["top"] < 250:
+                    if re.fullmatch(r"\d{3}", text_clean):
+                        itv_map[w["x0"]] = text_clean
+                    elif "TRAINING" in text_clean:
+                        itv_map[w["x0"]] = "TRAINING"
 
-            if not itv_columns:
+            if not itv_map:
                 continue
 
-            # Urutkan kolom dari kiri ke kanan
-            itv_columns = sorted(itv_columns, key=lambda c: c["x"])
-
-            # Ambil hanya 4 kolom pertama (biasanya memang 4 kolom tetap)
-            # Ini supaya ITV header bawah tidak ikut dianggap kolom baru
-            if len(itv_columns) > 4:
-                itv_columns = itv_columns[:4]
+            # Urutkan kolom berdasarkan X
+            sorted_columns = sorted(itv_map.items(), key=lambda x: x[0])
+            column_x_positions = [col[0] for col in sorted_columns]
+            column_values = [col[1] for col in sorted_columns]
 
             # ===============================
-            # 2️⃣ Proses nomor 4 digit
+            # 2️⃣ Proses nomor & nama
             # ===============================
             i = 0
             while i < len(words):
@@ -60,7 +58,6 @@ def extract_itv_data(uploaded_file):
                     top = round(word["top"], 1)
                     j = i + 1
 
-                    # Gabung nama dalam satu baris
                     while j < len(words):
                         next_word = words[j]
                         next_text = next_word["text"]
@@ -69,24 +66,24 @@ def extract_itv_data(uploaded_file):
                         if abs(next_top - top) > 3:
                             break
 
-                        if re.fullmatch(r"\d+", next_text):
+                        if re.match(r"\d{4}", next_text):
                             break
 
-                        if re.match(r"\d{4}", next_text):
+                        if re.fullmatch(r"\d+", next_text):
                             break
 
                         nama_parts.append(next_text)
                         j += 1
 
-                    # Tentukan kolom berdasarkan jarak paling dekat
+                    # Tentukan kolom berdasarkan posisi X terdekat
                     x_person = word["x0"]
 
-                    closest_column = min(
-                        itv_columns,
-                        key=lambda col: abs(col["x"] - x_person)
+                    closest_index = min(
+                        range(len(column_x_positions)),
+                        key=lambda idx: abs(column_x_positions[idx] - x_person)
                     )
 
-                    itv_value = closest_column["value"]
+                    itv_value = column_values[closest_index]
                     nama = " ".join(nama_parts).strip()
 
                     if nama:
