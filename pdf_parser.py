@@ -12,49 +12,48 @@ def extract_itv_data(uploaded_file):
             if not words:
                 continue
 
-            # Kelompokkan berdasarkan baris (posisi vertikal)
-            lines = {}
+            # Urutkan berdasarkan posisi vertikal dulu
+            words = sorted(words, key=lambda w: (w["top"], w["x0"]))
+
+            current_itv = None
+            last_top = None
+
             for word in words:
-                top = round(word["top"], 0)
-                lines.setdefault(top, []).append(word)
+                text = word["text"]
+                top = round(word["top"], 1)
 
-            sorted_lines = sorted(lines.items(), key=lambda x: x[0])
+                # Jika pindah baris cukup jauh → reset ITV detection
+                if last_top and abs(top - last_top) > 15:
+                    pass
 
-            current_itv = []
+                last_top = top
 
-            for _, line_words in sorted_lines:
-                texts = [w["text"] for w in sorted(line_words, key=lambda x: x["x0"])]
-
-                # =====================
+                # =============================
                 # DETEKSI ITV (3 digit saja)
-                # =====================
-                itv_candidates = [t for t in texts if re.fullmatch(r"\d{3}", t)]
-
-                if len(itv_candidates) >= 1:
-                    current_itv = itv_candidates
+                # =============================
+                if re.fullmatch(r"\d{3}", text):
+                    current_itv = text
                     continue
 
-                # =====================
-                # DETEKSI NOMOR 4 digit
-                # =====================
-                row_text = " ".join(texts)
-                matches = re.findall(r"(\d{4})\s+([A-Z][A-Z\s\.]+)", row_text)
+                # =============================
+                # DETEKSI NOMOR + NAMA
+                # =============================
+                match = re.match(r"(\d{4})([A-Z\.]*)", text)
 
-                if matches and current_itv:
-                    for idx, match in enumerate(matches):
-                        nomor = match[0]
-                        nama = match[1].strip()
+                if match and current_itv:
+                    nomor = match.group(1)
+                    nama = match.group(2)
 
-                        # Cocokkan dengan ITV sesuai urutan
-                        if idx < len(current_itv):
-                            itv = current_itv[idx]
-                        else:
-                            itv = current_itv[0]
+                    data.append({
+                        "ITV": current_itv,
+                        "Nomor": nomor,
+                        "Nama": nama
+                    })
 
-                        data.append({
-                            "ITV": itv,
-                            "Nomor": nomor,
-                            "Nama": nama
-                        })
+    df = pd.DataFrame(data)
 
-    return pd.DataFrame(data)
+    # Bersihkan data kosong
+    df = df[df["Nama"] != ""]
+    df = df.reset_index(drop=True)
+
+    return df
